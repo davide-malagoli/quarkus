@@ -11,5 +11,9 @@ public enum PasswordType {
     /**
      * The password is stored in clear text. Do not use in production.
      */
-    CLEAR;
+    CLEAR,
+    /**
+     * The password is stored in custom format.
+     */
+    CUSTOM;
 }

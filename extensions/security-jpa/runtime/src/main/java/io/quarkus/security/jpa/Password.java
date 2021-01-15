@@ -22,4 +22,6 @@ public @interface Password {
      * Sets the password storage type. defaults to {@link PasswordType#MCF}.
      */
     PasswordType value() default PasswordType.MCF;
+
+    Class<? extends PasswordHasher> hash() default PasswordHasher.class;
 }
