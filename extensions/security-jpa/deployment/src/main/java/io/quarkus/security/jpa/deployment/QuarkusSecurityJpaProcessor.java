@@ -110,9 +110,10 @@ class QuarkusSecurityJpaProcessor {
                     annotatedRoles);
             AnnotationInstance passAnnotation = jpaSecurityDefinition.password.annotation(DOTNAME_PASSWORD);
             AnnotationValue passwordType = passAnnotation.value();
+            AnnotationValue customClass = passAnnotation.value("hash");
             generateIdentityProvider(index.getIndex(), jpaSecurityDefinition,
                     passwordType != null ? passwordType.asEnum() : PasswordType.MCF.name(),
-                    beanProducer, panacheEntities);
+                    beanProducer, panacheEntities, customClass);
 
             generateTrustedIdentityProvider(index.getIndex(), jpaSecurityDefinition,
                     beanProducer, panacheEntities);
@@ -142,7 +143,7 @@ class QuarkusSecurityJpaProcessor {
     }
 
     private void generateIdentityProvider(Index index, JpaSecurityDefinition jpaSecurityDefinition, String passwordType,
-            BuildProducer<GeneratedBeanBuildItem> beanProducer, Set<String> panacheClasses) {
+            BuildProducer<GeneratedBeanBuildItem> beanProducer, Set<String> panacheClasses, AnnotationValue customClass) {
         GeneratedBeanGizmoAdaptor gizmoAdaptor = new GeneratedBeanGizmoAdaptor(beanProducer);
 
         String name = jpaSecurityDefinition.annotatedClass.name() + "__JpaIdentityProviderImpl";
@@ -179,6 +180,8 @@ class QuarkusSecurityJpaProcessor {
                 // :pass = user.pass | user.getPass()
                 ResultHandle pass = jpaSecurityDefinition.password.readValue(methodCreator, userVar);
                 String getPasswordMethod;
+                boolean useCustomClass = false;
+
                 if (passwordType == null) {
                     passwordType = PasswordType.MCF.name();
                 }
@@ -189,15 +192,28 @@ class QuarkusSecurityJpaProcessor {
                     case MCF:
                         getPasswordMethod = "getMcfPassword";
                         break;
+                    case CUSTOM:
+                        getPasswordMethod = "hash";
+                        useCustomClass = true;
+                        break;
                     default:
                         throw new RuntimeException("Unknown password type: " + passwordType);
                 }
                 // :getPasswordMethod(:pass);
-                ResultHandle storedPassword = methodCreator.invokeVirtualMethod(
-                        MethodDescriptor.ofMethod(name, getPasswordMethod, org.wildfly.security.password.Password.class,
-                                String.class),
-                        methodCreator.getThis(), pass);
+                ResultHandle storedPassword;
+                if (useCustomClass) {
 
+                    storedPassword = methodCreator.invokeVirtualMethod(
+                            MethodDescriptor.ofMethod(customClass, getPasswordMethod,
+                                    org.wildfly.security.password.Password.class,
+                                    String.class),
+                            methodCreator.getThis(), pass);
+                } else {
+                    storedPassword = methodCreator.invokeVirtualMethod(
+                            MethodDescriptor.ofMethod(name, getPasswordMethod, org.wildfly.security.password.Password.class,
+                                    String.class),
+                            methodCreator.getThis(), pass);
+                }
                 // Builder builder = checkPassword(storedPassword, request);
                 ResultHandle builder = methodCreator.invokeVirtualMethod(MethodDescriptor.ofMethod(name, "checkPassword",
                         QuarkusSecurityIdentity.Builder.class,
